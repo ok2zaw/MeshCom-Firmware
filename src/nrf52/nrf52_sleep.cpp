@@ -26,6 +26,7 @@ extern void stop_advertising();
 // LED-07 (loop_functions.cpp); forward-declared because loop_functions_extern.h is far too heavy for this TU.
 // remoteLedForceOff() exists wherever REMOTE_LED_PIN is defined, which on nRF52 is BOARD_LED.
 extern void boardLedForceOff(void);
+extern void extWdtForceLow(void);   // EXT-WDT (nrf52_main.cpp); no-op without EXT_WDT_PIN
 #if defined(BOARD_LED)
 extern void remoteLedForceOff(void);
 #endif
@@ -69,6 +70,7 @@ void nrf52EnterDeepSleep()
     remoteLedForceOff();
     #endif
     boardLedForceOff();
+    extWdtForceLow();
 
     // (c) Display off. RAK4631 has none.
     #if defined(BOARD_HELTEC_T114)

@@ -24,6 +24,11 @@ definitions for RAK4631
 #define BUTTON_PIN WB_IO6       // only in combination with RAK13002
 #define OneWire_GPIO WB_IO1     // only in combination with RAK13002
 
+// EXT-WDT (src/ext_watchdog.h): 100 ms HIGH pulse every 30 s from the main loop for an
+// external hardware watchdog. WB_IO4 (P0.04, slot C) is unused by the firmware.
+// Comment out to disable; EXT_WDT_INTERVAL_MS / EXT_WDT_PULSE_MS override the timing.
+#define EXT_WDT_PIN WB_IO4
+
 #define ENABLE_RAK_GPS
 #define ENABLE_GPS_DISABLED   // this board uses ENABLE_RAK_GPS instead of ENABLE_GPS
 

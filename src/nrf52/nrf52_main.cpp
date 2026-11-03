@@ -139,6 +139,7 @@ void sendHeartbeat();
 #include "onrx_stats.h" // OR-STAT
 #include "setlog_lines.h"
 #include "dedup_functions.h"
+#include "ext_watchdog.h"   // EXT-WDT: pulse for an external hardware watchdog
 #include "nbr_matrix.h"    // --nbrdebug: nbrLogSnapshot()/nbrMatrix fuer den 15-Minuten-Takt
 #include <command_functions.h>
 #include <aprs_functions.h>
@@ -513,6 +514,39 @@ static void seedRandomFromHw()
 }
 
 ///////////////////////////////////////////
+#if defined(EXT_WDT_PIN)
+static uint32_t extWdtTimer = 0;
+static bool extWdtHigh = false;
+
+static void extWdtSetup(void)
+{
+    pinMode(EXT_WDT_PIN, OUTPUT);
+    digitalWrite(EXT_WDT_PIN, LOW);
+    extWdtHigh = false;
+    extWdtTimer = millis() - EXT_WDT_INTERVAL_MS;   // first pulse on the first loop pass
+}
+
+static void extWdtTick(void)
+{
+    const ExtWdtStep st = extWdtPhase(millis(), extWdtTimer, extWdtHigh);
+    extWdtTimer = st.timer;
+    extWdtHigh = st.high;
+    if (st.changed)
+        digitalWrite(EXT_WDT_PIN, st.high ? HIGH : LOW);
+}
+
+// Before System OFF (nrf52_sleep.cpp): the pin ends LOW. The pulses stop while the node
+// sleeps, so the external watchdog will wake it by a power cycle -- do not combine the
+// external watchdog with deep sleep.
+void extWdtForceLow(void)
+{
+    extWdtHigh = false;
+    digitalWrite(EXT_WDT_PIN, LOW);
+}
+#else
+void extWdtForceLow(void) {}
+#endif
+
 void nrf52setup()
 {
 #if defined NRF52_SERIES || defined ESP32
@@ -561,6 +595,10 @@ void nrf52setup()
         digitalWrite(BOARD_LED, boardLedLevel(false, BOARD_LED_ACTIVE_LOW));
     #endif
 
+    #if defined(EXT_WDT_PIN)
+    extWdtSetup();
+    #endif
+
     //  Initialize the Serial Port for debug output
     time_t timeout = millis();
     Serial.begin(MONITOR_SPEED);
@@ -578,6 +616,10 @@ void nrf52setup()
 
     Serial.println("=====================================");
     Serial.println("[INIT] START CLIENT");
+    #if defined(EXT_WDT_PIN)
+    Serial.printf("[INIT]...external watchdog: %u ms pulse on pin %u every %u s\n",
+                  (unsigned)EXT_WDT_PULSE_MS, (unsigned)EXT_WDT_PIN, (unsigned)(EXT_WDT_INTERVAL_MS / 1000));
+    #endif
     nrf52_heapMinFree = nrf52_getFreeHeap();
     nrf52_heapFree = nrf52_heapMinFree;
     Serial.printf("%s;[HEAP];%lu;%lu;%lu;(init)\n", getTimeString().c_str(),
@@ -1306,6 +1348,9 @@ void nrf52loop()
     remoteLedTick();   // RM "led flash" pattern (LED-07)
     #endif
     boardLedTick();    // --board led heartbeat; no-op without BOARD_LED
+    #if defined(EXT_WDT_PIN)
+    extWdtTick();      // EXT-WDT: external watchdog pulse, only while this loop runs
+    #endif
 
     // BP-01/BP-04: close a back-pressure episode with QRV once the TX ring
     // has drained, even when no further user message arrives to observe it.
